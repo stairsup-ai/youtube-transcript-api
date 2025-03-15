@@ -10,7 +10,9 @@ from defusedxml import ElementTree
 
 import re
 
-from requests import HTTPError, Session, Response
+from requests import HTTPError, Response
+
+from .scrapeops_client import ScrapeOpsClient
 
 from ._errors import (
     VideoUnavailable,
@@ -83,7 +85,7 @@ class _PlayabilityStatus(str, Enum):
 
 
 class _PlayabilityFailedReason(str, Enum):
-    BOT_DETECTED = "Sign in to confirm you’re not a bot"
+    BOT_DETECTED = "Sign in to confirm you're not a bot"
     AGE_RESTRICTED = "Sign in to confirm your age"
     VIDEO_UNAVAILABLE = "Video unavailable"
 
@@ -99,7 +101,7 @@ def _raise_http_errors(response: Response, video_id: str) -> Response:
 class Transcript:
     def __init__(
         self,
-        http_client: Session,
+        http_client: ScrapeOpsClient,
         video_id: str,
         url: str,
         language: str,
@@ -199,7 +201,7 @@ class TranscriptList:
 
     @staticmethod
     def build(
-        http_client: Session, video_id: str, captions_json: Dict
+        http_client: ScrapeOpsClient, video_id: str, captions_json: Dict
     ) -> "TranscriptList":
         """
         Factory method for TranscriptList.
@@ -339,7 +341,7 @@ class TranscriptList:
 
 
 class TranscriptListFetcher:
-    def __init__(self, http_client: Session):
+    def __init__(self, http_client: ScrapeOpsClient):
         self._http_client = http_client
 
     def fetch(self, video_id: str) -> TranscriptList:
@@ -350,15 +352,64 @@ class TranscriptListFetcher:
         )
 
     def _extract_captions_json(self, html: str, video_id: str) -> Dict:
+        """
+        Extract the captions JSON from the YouTube watch page HTML.
+        
+        Args:
+            html: HTML content of the YouTube watch page
+            video_id: YouTube video ID
+            
+        Returns:
+            Dictionary containing caption information
+        """
         splitted_html = html.split("var ytInitialPlayerResponse = ")
 
         if len(splitted_html) <= 1:
             if 'class="g-recaptcha"' in html:
                 raise IpBlocked(video_id)
-
-        video_data = json.loads(
-            splitted_html[1].split("</script>")[0].strip().rstrip(";")
-        )
+            
+            # Additional check for a common YouTube error page
+            if any(marker in html for marker in ['This video isn\'t available anymore', 'Video unavailable']):
+                raise VideoUnavailable(video_id)
+                
+            # Handle case where the HTML doesn't have the expected structure
+            # Try using a more flexible regex-based approach
+            import re
+            match = re.search(r'var\s+ytInitialPlayerResponse\s*=\s*({.+?});\s*var', html, re.DOTALL)
+            if match:
+                try:
+                    video_data = json.loads(match.group(1))
+                except json.JSONDecodeError:
+                    # If still can't parse the JSON, raise an error
+                    raise YouTubeRequestFailed(video_id, "Failed to parse YouTube player response JSON")
+            else:
+                # If regex approach fails, try one more approach
+                match = re.search(r'ytInitialPlayerResponse\s*=\s*({.+?});(?:var|const)', html, re.DOTALL)
+                if match:
+                    try:
+                        video_data = json.loads(match.group(1))
+                    except json.JSONDecodeError:
+                        # If all approaches fail, raise an error
+                        raise YouTubeRequestFailed(video_id, "Could not find player response in page HTML")
+                else:
+                    raise YouTubeRequestFailed(video_id, "Could not find initial player response in page HTML")
+        else:
+            # Original approach
+            try:
+                # The content after ytInitialPlayerResponse = is JSON that ends with a semicolon and </script>
+                player_response = splitted_html[1].split("</script>")[0].strip().rstrip(";")
+                video_data = json.loads(player_response)
+            except (IndexError, json.JSONDecodeError) as e:
+                # If we can't parse the JSON, try a more flexible approach
+                import re
+                match = re.search(r'var\s+ytInitialPlayerResponse\s*=\s*({.+?});\s*(?:var|</script>)', html, re.DOTALL)
+                if match:
+                    try:
+                        video_data = json.loads(match.group(1))
+                    except json.JSONDecodeError:
+                        raise YouTubeRequestFailed(video_id, f"Failed to parse YouTube player response: {str(e)}")
+                else:
+                    raise YouTubeRequestFailed(video_id, f"Failed to extract player response: {str(e)}")
 
         self._assert_playability(video_data.get("playabilityStatus"), video_id)
 

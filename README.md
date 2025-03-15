@@ -362,6 +362,44 @@ ytt_api_2 = YouTubeTranscriptApi(http_client=session)
 ytt_api_2.fetch(video_id)
 ```
 
+## Using ScrapeOps for Reliable Scraping
+
+This library supports using [ScrapeOps](https://scrapeops.io/) as a scraping proxy provider to improve reliability when retrieving transcripts from YouTube. ScrapeOps handles proxies, IP rotation, CAPTCHA bypassing, and other anti-scraping measures automatically.
+
+To use ScrapeOps, you'll need to [sign up for a ScrapeOps account](https://scrapeops.io/) and get an API key. Then, you can use it with the library like this:
+
+```python
+from youtube_transcript_api import YouTubeTranscriptApi
+
+# Initialize the API with your ScrapeOps API key
+ytt_api = YouTubeTranscriptApi(scrapeops_api_key="YOUR_SCRAPEOPS_API_KEY")
+
+# Fetch transcripts as usual
+transcript = ytt_api.fetch(video_id)
+```
+
+You can also use the ScrapeOpsClient directly if you need more control:
+
+```python
+from youtube_transcript_api import YouTubeTranscriptApi, ScrapeOpsClient
+
+# Create a custom ScrapeOps client
+scrapeops_client = ScrapeOpsClient(api_key="YOUR_SCRAPEOPS_API_KEY")
+
+# Configure custom headers if needed
+scrapeops_client.headers.update({"Accept-Language": "en-US,en;q=0.9"})
+
+# Use the client with the API
+ytt_api = YouTubeTranscriptApi(http_client=scrapeops_client)
+transcript = ytt_api.fetch(video_id)
+```
+
+Using ScrapeOps is recommended when:
+
+- You're experiencing IP blocks or CAPTCHAs from YouTube
+- You need to make a large number of requests reliably
+- You're running the code in a server environment where your IP is likely to be flagged
+
 ## Cookie Authentication
 
 Some videos are age restricted, so this module won't be able to access those videos without some sort of

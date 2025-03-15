@@ -4,13 +4,12 @@ from typing import Optional, Iterable, Union
 
 from http.cookiejar import MozillaCookieJar, LoadError
 
-from requests import Session
-
 from .proxies import ProxyConfig, GenericProxyConfig
+from .scrapeops_client import ScrapeOpsClient
 
 from ._transcripts import TranscriptListFetcher, FetchedTranscript, TranscriptList
 
-from ._errors import CookiePathInvalid, CookieInvalid
+from ._errors import CookiePathInvalid, CookieInvalid, TranscriptsDisabled, VideoUnavailable
 
 
 def _load_cookie_jar(cookies: Union[Path, str]) -> MozillaCookieJar:
@@ -29,7 +28,8 @@ class YouTubeTranscriptApi:
         self,
         cookie_path: Optional[Union[Path, str]] = None,
         proxy_config: Optional[ProxyConfig] = None,
-        http_client: Optional[Session] = None,
+        http_client: Optional[ScrapeOpsClient] = None,
+        scrapeops_api_key: Optional[str] = None,
     ):
         """
         :param cookie_path: Path to a text file containing YouTube authorization cookies
@@ -38,11 +38,16 @@ class YouTubeTranscriptApi:
             by YouTube, as described in the "Working around IP bans" section of the
             README
             (https://github.com/jdepoix/youtube-transcript-api?tab=readme-ov-file#working-around-ip-bans-requestblocked-or-ipblocked-exception)
-        :param http_client: You can optionally pass in a requests.Session object, if you
+        :param http_client: You can optionally pass in a ScrapeOpsClient object, if you
             manually want to share cookies between different instances of
             `YouTubeTranscriptApi`, overwrite defaults, specify SSL certificates, etc.
+        :param scrapeops_api_key: Your ScrapeOps API key for making requests through their proxy service
         """
-        http_client = Session() if http_client is None else http_client
+        if http_client is None:
+            if scrapeops_api_key is None:
+                raise ValueError("Either http_client or scrapeops_api_key must be provided")
+            http_client = ScrapeOpsClient(api_key=scrapeops_api_key)
+        
         http_client.headers.update({"Accept-Language": "en-US"})
         if cookie_path is not None:
             http_client.cookies = _load_cookie_jar(cookie_path)
@@ -131,7 +136,7 @@ class YouTubeTranscriptApi:
         return self._fetcher.fetch(video_id)
 
     @classmethod
-    def list_transcripts(cls, video_id, proxies=None, cookies=None):
+    def list_transcripts(cls, video_id, proxies=None, cookies=None, scrapeops_api_key=None):
         """
         DEPRECATED: use the `list` method instead!
 
@@ -178,6 +183,8 @@ class YouTubeTranscriptApi:
         :type proxies: {'http': str, 'https': str} - http://docs.python-requests.org/en/master/user/advanced/#proxies
         :param cookies: a string of the path to a text file containing youtube authorization cookies
         :type cookies: str
+        :param scrapeops_api_key: Your ScrapeOps API key for making requests through their proxy service
+        :type scrapeops_api_key: str
         :return: the list of available transcripts
         :rtype TranscriptList:
         """
@@ -199,6 +206,7 @@ class YouTubeTranscriptApi:
         ytt_api = YouTubeTranscriptApi(
             proxy_config=proxy_config,
             cookie_path=Path(cookies) if cookies else None,
+            scrapeops_api_key=scrapeops_api_key,
         )
         return ytt_api.list(video_id)
 
@@ -211,6 +219,7 @@ class YouTubeTranscriptApi:
         proxies=None,
         cookies=None,
         preserve_formatting=False,
+        scrapeops_api_key=None,
     ):
         """
         DEPRECATED: use the `fetch` method instead!
@@ -232,6 +241,8 @@ class YouTubeTranscriptApi:
         :type cookies: str
         :param preserve_formatting: whether to keep select HTML text formatting
         :type preserve_formatting: bool
+        :param scrapeops_api_key: Your ScrapeOps API key for making requests through their proxy service
+        :type scrapeops_api_key: str
         :return: a tuple containing a dictionary mapping video ids onto their corresponding transcripts, and a list of
         video ids, which could not be retrieved
         :rtype ({str: [{'text': str, 'start': float, 'end': float}]}, [str]}):
@@ -250,7 +261,7 @@ class YouTubeTranscriptApi:
         for video_id in video_ids:
             try:
                 data[video_id] = cls.get_transcript(
-                    video_id, languages, proxies, cookies, preserve_formatting
+                    video_id, languages, proxies, cookies, preserve_formatting, scrapeops_api_key
                 )
             except Exception as exception:
                 if not continue_after_error:
@@ -268,13 +279,12 @@ class YouTubeTranscriptApi:
         proxies=None,
         cookies=None,
         preserve_formatting=False,
+        scrapeops_api_key=None,
     ):
         """
         DEPRECATED: use the `fetch` method instead!
 
-        Retrieves the transcript for a single video. This is just a shortcut for calling::
-
-            YouTubeTranscriptApi.list_transcripts(video_id, proxies).find_transcript(languages).fetch()
+        Retrieves the transcript for a single video.
 
         :param video_id: the youtube video id
         :type video_id: str
@@ -288,8 +298,10 @@ class YouTubeTranscriptApi:
         :type cookies: str
         :param preserve_formatting: whether to keep select HTML text formatting
         :type preserve_formatting: bool
-        :return: a list of dictionaries containing the 'text', 'start' and 'duration' keys
-        :rtype [{'text': str, 'start': float, 'end': float}]:
+        :param scrapeops_api_key: Your ScrapeOps API key for making requests through their proxy service
+        :type scrapeops_api_key: str
+        :return: a list of dictionaries containing the transcript data
+        :rtype: [{'text': str, 'start': float, 'duration': float}]:
         """
         warnings.warn(
             "`get_transcript` is deprecated and will be removed in a future version. "
@@ -297,10 +309,18 @@ class YouTubeTranscriptApi:
             DeprecationWarning,
         )
 
-        assert isinstance(video_id, str), "`video_id` must be a string"
-        return (
-            cls.list_transcripts(video_id, proxies, cookies)
-            .find_transcript(languages)
-            .fetch(preserve_formatting=preserve_formatting)
-            .to_raw_data()
-        )
+        try:
+            ytt_api = YouTubeTranscriptApi(
+                proxy_config=GenericProxyConfig(
+                    http_url=(proxies or {}).get("http"),
+                    https_url=(proxies or {}).get("https"),
+                ),
+                cookie_path=Path(cookies) if cookies else None,
+                scrapeops_api_key=scrapeops_api_key,
+            )
+            return ytt_api.fetch(
+                video_id, languages, preserve_formatting=preserve_formatting
+            ).to_raw_data()
+        except (VideoUnavailable, TranscriptsDisabled) as exception:
+            exception.with_traceback(None)
+            raise

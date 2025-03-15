@@ -25,3 +25,4 @@ from ._errors import (
     InvalidVideoId,
     AgeRestricted,
 )
+from .scrapeops_client import ScrapeOpsClient
