@@ -44,53 +44,53 @@ class ScrapeOpsClient:
         """
         logger.debug(f"Making GET request to {url} through ScrapeOps")
         
-        # Determine if this is a YouTube request
-        is_youtube = 'youtube.com' in url or 'youtu.be' in url
+        # # Determine if this is a YouTube request
+        # is_youtube = 'youtube.com' in url or 'youtu.be' in url
         
         # Prepare ScrapeOps proxy parameters
         proxy_params = {
             'api_key': self.api_key,
             'url': url,
             'optimize_request': 'true',  # Optimize the request for target websites
-            'render_js': 'false',        # We don't need JavaScript rendering for YouTube transcripts
-            'keep_headers': 'true',      # Keep original headers in the response
-            'country': 'us',             # Use US IP addresses for YouTube
+            # 'render_js': 'false',        # We don't need JavaScript rendering for YouTube transcripts
+            # 'keep_headers': 'true',      # Keep original headers in the response
+            # 'country': 'us',             # Use US IP addresses for YouTube
         }
         
-        # Add parameters if provided
-        if params:
-            # Build a query string from the params dictionary
-            if '?' in url:
-                # URL already has parameters
-                param_str = '&'.join(f"{k}={v}" for k, v in params.items())
-                proxy_params['url'] = f"{url}&{param_str}"
-            else:
-                # URL doesn't have parameters yet
-                param_str = '&'.join(f"{k}={v}" for k, v in params.items())
-                proxy_params['url'] = f"{url}?{param_str}"
+        # # Add parameters if provided
+        # if params:
+        #     # Build a query string from the params dictionary
+        #     if '?' in url:
+        #         # URL already has parameters
+        #         param_str = '&'.join(f"{k}={v}" for k, v in params.items())
+        #         proxy_params['url'] = f"{url}&{param_str}"
+        #     else:
+        #         # URL doesn't have parameters yet
+        #         param_str = '&'.join(f"{k}={v}" for k, v in params.items())
+        #         proxy_params['url'] = f"{url}?{param_str}"
         
-        # Add YouTube-specific optimizations
-        if is_youtube:
-            # Set premium flag for YouTube
-            proxy_params['premium'] = 'true'
-            # Use a standard YouTube browser profile
-            proxy_params['browser_type'] = 'chrome'
+        # # Add YouTube-specific optimizations
+        # if is_youtube:
+        #     # Set premium flag for YouTube
+        #     proxy_params['premium'] = 'true'
+        #     # Use a standard YouTube browser profile
+        #     proxy_params['browser_type'] = 'chrome'
         
-        # Add custom headers if specified
-        if self.headers:
-            # Add default YouTube-friendly headers if not already specified
-            if is_youtube and 'User-Agent' not in self.headers:
-                self.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            if is_youtube and 'Accept-Language' not in self.headers:
-                self.headers['Accept-Language'] = 'en-US,en;q=0.9'
+        # # Add custom headers if specified
+        # if self.headers:
+        #     # Add default YouTube-friendly headers if not already specified
+        #     if is_youtube and 'User-Agent' not in self.headers:
+        #         self.headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        #     if is_youtube and 'Accept-Language' not in self.headers:
+        #         self.headers['Accept-Language'] = 'en-US,en;q=0.9'
                 
-            proxy_params['headers'] = json.dumps(dict(self.headers))
+        #     proxy_params['headers'] = json.dumps(dict(self.headers))
             
-        # Add cookies if present
-        if len(self.cookies) > 0:
-            # Convert cookies to a format ScrapeOps can use
-            cookie_dict = requests.utils.dict_from_cookiejar(self.cookies)
-            proxy_params['cookies'] = json.dumps(cookie_dict)
+        # # Add cookies if present
+        # if len(self.cookies) > 0:
+        #     # Convert cookies to a format ScrapeOps can use
+        #     cookie_dict = requests.utils.dict_from_cookiejar(self.cookies)
+        #     proxy_params['cookies'] = json.dumps(cookie_dict)
         
         try:
             # Make the request through ScrapeOps proxy

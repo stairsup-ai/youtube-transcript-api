@@ -83,62 +83,54 @@ def advanced_usage(video_id: str, api_key: str) -> bool:
         True if successful, False otherwise
     """
     logger.info(f"Demonstrating advanced usage with custom ScrapeOpsClient for video {video_id}")
-    
+
     # Create a custom ScrapeOps client with custom configuration
     scrapeops_client = ScrapeOpsClient(
         api_key=api_key,
         timeout=180  # Increase timeout to 3 minutes
     )
-    
-    # Configure custom headers to appear more like a regular browser
-    # scrapeops_client.headers.update({
-    #     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    #     "Accept-Language": "en-US,en;q=0.9",
-    #     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-    #     "Referer": "https://www.youtube.com/",
-    # })
-    
+
     # Initialize the API with the custom client
     ytt_api = YouTubeTranscriptApi(http_client=scrapeops_client)
-    
+
     try:
         # First try to simply list available transcripts
         transcript_list = ytt_api.list(video_id)
-        
+
         logger.info(f"Available transcripts for video {video_id}:")
         for transcript in transcript_list:
             logger.info(f"  - {transcript.language} ({transcript.language_code}), Generated: {transcript.is_generated}, Translatable: {transcript.is_translatable}")
-        
+
         # Try to find a transcript in English or any available language
         transcript = transcript_list.find_transcript(['en', '*'])
-        
+
         # Fetch the transcript
         fetched_transcript = transcript.fetch()
-        
+
         # Print transcript details
         logger.info(f"Retrieved transcript with {len(fetched_transcript)} snippets")
-        
+
         # Convert to different formats using formatters
         json_formatter = JSONFormatter()
         webvtt_formatter = WebVTTFormatter()
-        
+
         # Save to files
         json_formatted = json_formatter.format_transcript(fetched_transcript, indent=2)
         webvtt_formatted = webvtt_formatter.format_transcript(fetched_transcript)
-        
+
         file_prefix = f"{video_id}_transcript"
-        
+
         with open(f"{file_prefix}.json", "w", encoding="utf-8") as f:
             f.write(json_formatted)
             logger.info(f"Saved transcript as JSON to {file_prefix}.json")
-            
+
         with open(f"{file_prefix}.vtt", "w", encoding="utf-8") as f:
             f.write(webvtt_formatted)
             logger.info(f"Saved transcript as WebVTT to {file_prefix}.vtt")
-            
+
         # Success!
         return True
-            
+
     except Exception as e:
         logger.error(f"Error in advanced usage for video {video_id}: {str(e)}")
         logger.debug("Detailed traceback:", exc_info=True)
